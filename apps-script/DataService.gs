@@ -122,6 +122,27 @@ var DataService = (function () {
     return Utilities.formatDate(date, APP_CONFIG.TIMEZONE, 'yyyyMM');
   }
 
+  function normalizePeriodMonth(value) {
+    if (value === null || value === undefined || value === '') return '';
+    if (Object.prototype.toString.call(value) === '[object Date]') {
+      return Utilities.formatDate(value, APP_CONFIG.TIMEZONE, 'yyyyMM');
+    }
+    var text = String(value).trim();
+    if (/^\d{6}$/.test(text)) return text;
+    var isoLike = text.match(/^(\d{4})[-\/.](\d{1,2})/);
+    if (isoLike) return isoLike[1] + ('0' + isoLike[2]).slice(-2);
+    var compact = text.replace(/[^\d]/g, '');
+    if (/^\d{8}$/.test(compact)) return compact.slice(0, 6);
+    if (/^\d{5}$/.test(compact)) return compact.slice(0, 4) + '0' + compact.slice(4);
+    return compact.slice(0, 6);
+  }
+
+  function displayPeriodMonth(value) {
+    var normalized = normalizePeriodMonth(value);
+    if (!normalized || normalized.length !== 6) return value || '';
+    return normalized.slice(0, 4) + '-' + normalized.slice(4);
+  }
+
   function generateHash(parts) {
     var raw = parts.map(function (part) { return String(part || '').trim(); }).join('|').toLowerCase();
     var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, raw);
@@ -145,6 +166,8 @@ var DataService = (function () {
     normalizeText: normalizeText,
     nowIso: nowIso,
     periodMonth: periodMonth,
+    normalizePeriodMonth: normalizePeriodMonth,
+    displayPeriodMonth: displayPeriodMonth,
     generateHash: generateHash
   };
 })();

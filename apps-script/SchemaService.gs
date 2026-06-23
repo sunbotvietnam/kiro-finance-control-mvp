@@ -32,6 +32,7 @@ var SchemaService = (function () {
       });
     });
     seedDefaultUserIfEmpty();
+    seedDefaultLoginIfMissing();
   }
 
   function seedDefaultUserIfEmpty() {
@@ -53,6 +54,25 @@ var SchemaService = (function () {
     });
   }
 
+  function seedDefaultLoginIfMissing() {
+    var users = DataService.readRows('AUTH_USERS');
+    if (!users.length) return null;
+    var owner = users.find(function (user) { return user.role_id === 'SYSTEM_OWNER'; }) || users[0];
+    if (owner.login_id && owner.password_hash && owner.password_salt) return owner;
+    var loginId = owner.login_id || 'admin';
+    var salt = owner.password_salt || DataService.generateHash([owner.user_id, owner.email, DataService.nowIso()]).slice(0, 16);
+    var password = 'Kiro@2026!';
+    var updates = {
+      login_id: loginId,
+      password_salt: salt,
+      password_hash: AuthService.hashPassword(loginId, password, salt),
+      must_change_password: 'yes',
+      updated_at: DataService.nowIso()
+    };
+    DataService.updateRowByKey('AUTH_USERS', 'user_id', owner.user_id, updates);
+    return Object.assign({}, owner, updates);
+  }
+
   function getSchemaVersion() {
     var config = DataService.findByKey('SYSTEM_CONFIG', 'config_key', 'schema_version');
     return config ? config.config_value : APP_CONFIG.SCHEMA_VERSION;
@@ -62,6 +82,7 @@ var SchemaService = (function () {
     ensureRequiredSheets: ensureRequiredSheets,
     ensureHeaders: ensureHeaders,
     seedInitialDataIfEmpty: seedInitialDataIfEmpty,
+    seedDefaultLoginIfMissing: seedDefaultLoginIfMissing,
     getSchemaVersion: getSchemaVersion
   };
 })();

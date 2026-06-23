@@ -50,7 +50,7 @@ var SHEET_HEADERS = {
   AUDIT_LOG: ['audit_id', 'timestamp', 'user_id', 'email', 'role_id', 'action', 'object_type', 'object_id', 'before_value', 'after_value', 'status', 'note', 'user_agent'],
   METRIC_CATALOG: ['metric_id', 'metric_name_vi', 'module', 'description', 'data_source', 'calculation_type', 'sensitivity_level', 'allowed_roles', 'scope_supported', 'status'],
   NOTIFICATION_RULES: ['rule_id', 'rule_name', 'metric_id', 'condition', 'threshold', 'frequency', 'target_roles', 'target_scope_type', 'target_regions', 'target_territories', 'channel', 'message_template', 'status', 'created_at', 'updated_at'],
-  AUTH_USERS: ['user_id', 'email', 'display_name', 'role_id', 'scope_type', 'region_id', 'territory_id', 'site_id', 'staff_id', 'active_status', 'created_at', 'updated_at']
+  AUTH_USERS: ['user_id', 'email', 'display_name', 'role_id', 'scope_type', 'region_id', 'territory_id', 'site_id', 'staff_id', 'active_status', 'created_at', 'updated_at', 'login_id', 'password_hash', 'password_salt', 'must_change_password', 'last_login_at']
 };
 
 var SEED_DATA = {

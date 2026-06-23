@@ -1,10 +1,11 @@
 var ReportService = (function () {
   function getExecutiveSummary(filters) {
-    filters = filters || currentMonthFilter(filters);
+    filters = currentMonthFilter(filters);
     var summary = TransactionService.calculateCashSummary(filters);
     return {
       title: 'Báo cáo điều hành rút gọn',
       period_month: filters.period_month || '',
+      period_label: DataService.displayPeriodMonth(filters.period_month || ''),
       cash: summary,
       balances: TransactionService.calculateBalances({}),
       top_expense_groups: getCashByCategory(Object.assign({}, filters, { direction: 'outflow' })).slice(0, 5),
@@ -46,12 +47,17 @@ var ReportService = (function () {
 
   function getDataQualityReport() {
     var txs = TransactionService.getTransactions({});
+    var categories = indexBy(MasterDataService.getCategories(), 'category_code');
+    var accounts = indexBy(MasterDataService.getAccounts(), 'account_id');
     var issues = [];
     txs.forEach(function (tx) {
       if (['cancelled', 'voided', 'archived'].indexOf(tx.status) !== -1) return;
       addIssue(issues, tx, 'missing_category', !tx.category_code, 'Giao dịch thiếu mã khoản.');
+      addIssue(issues, tx, 'unknown_category', tx.category_code && !categories[tx.category_code], 'Mã khoản chưa có trong DM_CATEGORY.');
       addIssue(issues, tx, 'missing_counterparty', !tx.counterparty_id, 'Giao dịch thiếu đối tượng.');
       addIssue(issues, tx, 'missing_account', !tx.account_id, 'Giao dịch thiếu tài khoản tiền.');
+      addIssue(issues, tx, 'unknown_account', tx.account_id && !accounts[tx.account_id], 'Tài khoản tiền chưa có trong DM_ACCOUNT.');
+      addIssue(issues, tx, 'invalid_period_month', !DataService.normalizePeriodMonth(tx.period_month || tx.transaction_date), 'Kỳ báo cáo không đọc được.');
       addIssue(issues, tx, 'missing_evidence', ['chua_co', 'can_bo_sung', 'khong_hop_le'].indexOf(tx.evidence_status) !== -1, 'Giao dịch thiếu/cần bổ sung chứng từ.');
       addIssue(issues, tx, 'unmatched', tx.match_status === 'unmatched', 'Giao dịch chưa match.');
       addIssue(issues, tx, 'tax_review_needed', ['pending', 'needs_expert'].indexOf(tx.tax_review_status) !== -1, 'Giao dịch cần rà soát thuế.');
@@ -83,7 +89,7 @@ var ReportService = (function () {
     var groups = {};
     rows.forEach(function (tx) {
       if (['cancelled', 'voided', 'archived'].indexOf(tx.status) !== -1) return;
-      var groupKey = tx[key] || '(trống)';
+      var groupKey = key === 'period_month' ? DataService.normalizePeriodMonth(tx[key] || tx.transaction_date) : (tx[key] || '(trống)');
       if (!groups[groupKey]) groups[groupKey] = { key: groupKey, inflow: 0, outflow: 0, transfer: 0, net: 0, count: 0 };
       var amount = Number(tx.amount || 0);
       if (tx.direction === 'inflow') groups[groupKey].inflow += amount;
@@ -126,8 +132,30 @@ var ReportService = (function () {
 
   function currentMonthFilter(filters) {
     filters = filters || {};
-    if (!filters.period_month) filters.period_month = DataService.periodMonth(new Date());
+    if (filters.period_month) {
+      filters.period_month = DataService.normalizePeriodMonth(filters.period_month);
+      return filters;
+    }
+    filters.period_month = getLatestTransactionPeriod() || DataService.periodMonth(new Date());
     return filters;
+  }
+
+  function getLatestTransactionPeriod() {
+    var latest = '';
+    DataService.readRows('TRANSACTIONS').forEach(function (tx) {
+      if (['cancelled', 'voided', 'archived'].indexOf(tx.status) !== -1) return;
+      var period = DataService.normalizePeriodMonth(tx.period_month || tx.transaction_date);
+      if (period && period > latest) latest = period;
+    });
+    return latest;
+  }
+
+  function indexBy(rows, key) {
+    var map = {};
+    rows.forEach(function (row) {
+      if (row[key]) map[row[key]] = row;
+    });
+    return map;
   }
 
   return {

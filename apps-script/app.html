@@ -125,12 +125,17 @@
   async function submitQuickForm(event) {
     event.preventDefault();
     const form = event.currentTarget;
+    const submitBtn = form.querySelector('[type="submit"]');
+    const submitLabel = submitBtn.textContent;
     const payload = Object.fromEntries(new FormData(form).entries());
     payload.amount = parseMoney(payload.amount_display || payload.amount);
     delete payload.amount_display;
     payload.source_system = payload.direction === 'transfer' ? 'transfer' : 'manual';
     payload.source_id = 'manual-' + Date.now();
     try {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Đang lưu...';
+      showToast('Đang lưu giao dịch...');
       const tx = await callServer('apiCreateTransaction', payload);
       showToast('Đã lưu ' + tx.transaction_id);
       const evidenceLink = form.evidence_link.value.trim();
@@ -150,20 +155,31 @@
       form.direction.value = payload.direction;
       await Promise.all([loadDashboard(), loadLedger(), loadTax(), loadReports()]);
     } catch (err) {
-      showToast(err.message || String(err));
+      showToast('Lưu thất bại: ' + (err.message || String(err)));
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = submitLabel;
     }
   }
 
   async function submitRawBankText() {
     const raw = document.getElementById('bankRawText').value.trim();
     if (!raw) return showToast('Chưa có nội dung ngân hàng.');
+    const btn = document.getElementById('parseBankBtn');
+    const label = btn.textContent;
     try {
+      btn.disabled = true;
+      btn.textContent = 'Đang xử lý...';
+      showToast('Đang đưa vào hộp chờ...');
       const item = await callServer('apiCreateStagingFromRawText', raw, 'bank_sms');
       document.getElementById('bankRawText').value = '';
       showToast('Đã đưa vào hộp chờ: ' + item.import_id);
       await loadStaging();
     } catch (err) {
-      showToast(err.message || String(err));
+      showToast('Nhập staging thất bại: ' + (err.message || String(err)));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
     }
   }
 
@@ -192,6 +208,7 @@
   function renderDashboard() {
     const d = state.dashboard;
     const cash = d.cash || {};
+    document.getElementById('periodLabel').textContent = d.period_label || d.period_month || 'Kỳ hiện tại';
     document.getElementById('mAvailable').textContent = money(cash.available);
     document.getElementById('mInflow').textContent = money(cash.inflow);
     document.getElementById('mOutflow').textContent = money(cash.outflow);

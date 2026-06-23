@@ -13,6 +13,8 @@ var PermissionService = (function () {
   };
 
   function getCurrentUser() {
+    var tokenUser = AuthService.getRequestUser();
+    if (tokenUser && tokenUser.active_status !== 'inactive') return tokenUser;
     var email = Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail() || '';
     var user = DataService.findByKey('AUTH_USERS', 'email', email);
     if (user && user.active_status !== 'inactive') return user;

@@ -20,6 +20,14 @@ function handleJsonpApi_(e) {
     if (e.parameter.payload) {
       payload = JSON.parse(e.parameter.payload);
     }
+    if (e.parameter.action === 'login') {
+      response = { ok: true, data: AuthService.login(payload.login_id, payload.password) };
+      var loginBody = callback + '(' + JSON.stringify(response) + ');';
+      return ContentService.createTextOutput(loginBody).setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+    if (payload.auth_token) {
+      AuthService.setRequestUserFromToken(payload.auth_token);
+    }
     var result;
     switch (e.parameter.action) {
       case 'bootstrap':
@@ -54,6 +62,12 @@ function handleJsonpApi_(e) {
         break;
       case 'financeReport':
         result = apiGetFinanceFullReport(payload);
+        break;
+      case 'dataQuality':
+        result = apiGetDataQualityReport();
+        break;
+      case 'currentUser':
+        result = AuthService.publicUser(PermissionService.getCurrentUser());
         break;
       default:
         throw new Error('Unknown action: ' + e.parameter.action);

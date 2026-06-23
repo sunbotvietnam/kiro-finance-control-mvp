@@ -97,8 +97,9 @@ var TransactionService = (function () {
   function getTransactions(filters) {
     var rows = PermissionService.applyScope(DataService.readRows('TRANSACTIONS'));
     filters = filters || {};
+    var filterPeriod = DataService.normalizePeriodMonth(filters.period_month);
     return rows.filter(function (row) {
-      if (filters.period_month && row.period_month !== filters.period_month) return false;
+      if (filterPeriod && DataService.normalizePeriodMonth(row.period_month || row.transaction_date) !== filterPeriod) return false;
       if (filters.direction && row.direction !== filters.direction) return false;
       if (filters.category_code && row.category_code !== filters.category_code) return false;
       if (filters.account_id && row.account_id !== filters.account_id) return false;
