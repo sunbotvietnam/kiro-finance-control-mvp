@@ -68,7 +68,7 @@ const DEFAULT_CATS=[['THUHD','Thu hợp đồng/dịch vụ','inflow'],['THUNO',
 const DEFAULT_ACC=[['CASH-HN','Tiền mặt Hà Nội',0],['BIDV-001','BIDV vận hành',0],['VCB-001','Vietcombank vận hành',0],['MB-001','MB vận hành',0]];
 const DEFAULT_STAFF=[['','Không gắn nhân sự'],['STF-HN-HANH','Nguyễn Thị Hạnh · teacher'],['STF-HN-THU','Thu · operation'],['STF-NA-DUNG','Dung · operation']];
 const DEFAULT_CPS=[['','Chọn sau'],['CP-INTERNAL','Nội bộ Kiro'],['CP-BANK','Ngân hàng']];
-const DEFAULT_API_URL='https://script.google.com/macros/s/AKfycby8ECiGYTSYOmFd9JDp3fPS34g13UZ2GaA06hDh40-soqUqEOkEsA--U8N45OknGiwwQg/exec';
+const DEFAULT_API_URL='https://script.google.com/macros/s/AKfycbw-UI0PQTg58LZ2euRvkO5K5w4NOmURsBfSdP86V9Sf9JdjPafArQxdDiVtGVzelcOfwA/exec';
 const PUBLIC_API_TOKEN='kiro-finance-mvp-2026';
 let showAllCats=false, db=loadLocal(), master={categories:DEFAULT_CATS,accounts:DEFAULT_ACC,staff:DEFAULT_STAFF,counterparties:DEFAULT_CPS};
 const apiUrl=()=>localStorage.kfcApiUrl||DEFAULT_API_URL; const live=()=>!!apiUrl();
