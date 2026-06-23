@@ -2,6 +2,7 @@ var DataService = (function () {
   function getSpreadsheet() {
     var id = PropertiesService.getScriptProperties().getProperty('FINANCE_SHEET_ID');
     if (id) return SpreadsheetApp.openById(id);
+    if (APP_CONFIG.DEFAULT_SHEET_ID) return SpreadsheetApp.openById(APP_CONFIG.DEFAULT_SHEET_ID);
     var active = SpreadsheetApp.getActiveSpreadsheet();
     if (!active) {
       throw new Error('Chưa cấu hình FINANCE_SHEET_ID trong Script Properties.');

@@ -65,9 +65,16 @@
     <form id="quickForm" class="form-grid">
       <input type="hidden" name="direction" value="inflow">
       <label>Ngày phát sinh<input type="date" name="transaction_date" required></label>
-      <label>Số tiền<input type="number" name="amount" min="1" step="1000" inputmode="numeric" required></label>
+      <label>Số tiền
+        <input type="hidden" name="amount">
+        <input id="amountDisplay" name="amount_display" type="text" inputmode="numeric" autocomplete="off" placeholder="VD: 23.500.000" required>
+        <small id="amountPreview" class="field-note">0 đ</small>
+      </label>
       <label>Tài khoản tiền<select name="account_id" required></select></label>
-      <label>Mã khoản<select name="category_code" required></select></label>
+      <label>Mã khoản
+        <select name="category_code" required></select>
+        <small id="categoryHint" class="field-note">Danh mục lấy từ DM_CATEGORY. Có thể thêm/bớt trong Google Sheet.</small>
+      </label>
       <label>Đối tượng<select name="counterparty_id"></select></label>
       <label>Nhân sự liên quan<select name="staff_id"></select></label>
       <label>Phương thức thanh toán
@@ -88,7 +95,8 @@
       </label>
       <label class="wide">Nội dung<input name="description" maxlength="300" placeholder="VD: Thu học phí Robotics tháng 6" required></label>
       <label class="wide">Link chứng từ/file Drive<input name="evidence_link" placeholder="Không bắt buộc ở bước đầu"></label>
-      <button class="primary wide" type="submit">Lưu giao dịch</button>
+      <button class="secondary" id="toggleCategoryScopeBtn" type="button">Hiện tất cả mã khoản</button>
+      <button class="primary" type="submit">Lưu giao dịch</button>
     </form>
   </section>
 

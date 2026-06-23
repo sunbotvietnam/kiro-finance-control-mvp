@@ -3,6 +3,8 @@ var APP_CONFIG = {
   DISPLAY_NAME: 'Tài chính & Dòng tiền',
   SCHEMA_VERSION: '1.0.0',
   DEFAULT_TENANT_ID: 'KIRO_INTERNAL',
+  DEFAULT_SHEET_ID: '1E-Dfa2k3XRRDJ8dC6PfEGzshZ37jTkA3bUVk1o9PtvE',
+  PUBLIC_API_TOKEN: 'kiro-finance-mvp-2026',
   DEFAULT_CURRENCY: 'VND',
   TIMEZONE: 'Asia/Ho_Chi_Minh',
   OWNER_EMAILS: [],

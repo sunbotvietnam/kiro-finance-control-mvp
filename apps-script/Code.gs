@@ -1,9 +1,69 @@
-function doGet() {
+function doGet(e) {
   SchemaService.ensureRequiredSheets();
+  if (e && e.parameter && e.parameter.action) {
+    return handleJsonpApi_(e);
+  }
   return HtmlService.createTemplateFromFile('Index')
     .evaluate()
     .setTitle('Kiro Finance Control')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function handleJsonpApi_(e) {
+  var callback = e.parameter.callback || 'callback';
+  var response;
+  try {
+    if (e.parameter.token !== APP_CONFIG.PUBLIC_API_TOKEN) {
+      throw new Error('Invalid API token.');
+    }
+    var payload = {};
+    if (e.parameter.payload) {
+      payload = JSON.parse(e.parameter.payload);
+    }
+    var result;
+    switch (e.parameter.action) {
+      case 'bootstrap':
+        result = apiGetBootstrapData();
+        break;
+      case 'dashboard':
+        result = apiGetDashboard(payload);
+        break;
+      case 'transactions':
+        result = apiGetTransactions(payload);
+        break;
+      case 'createTransaction':
+        result = apiCreateTransaction(payload);
+        break;
+      case 'staging':
+        result = apiGetStagingItems(payload);
+        break;
+      case 'createStaging':
+        result = apiCreateStagingFromRawText(payload.rawText, payload.sourceSystem || 'bank_sms');
+        break;
+      case 'confirmStaging':
+        result = apiConfirmStaging(payload.importId, payload.confirmationPayload || {});
+        break;
+      case 'ignoreStaging':
+        result = apiIgnoreStaging(payload.importId);
+        break;
+      case 'markDuplicate':
+        result = apiMarkDuplicate(payload.importId);
+        break;
+      case 'tax':
+        result = apiGetTaxSummary(payload);
+        break;
+      case 'financeReport':
+        result = apiGetFinanceFullReport(payload);
+        break;
+      default:
+        throw new Error('Unknown action: ' + e.parameter.action);
+    }
+    response = { ok: true, data: result };
+  } catch (err) {
+    response = { ok: false, error: err.message || String(err) };
+  }
+  var body = callback + '(' + JSON.stringify(response) + ');';
+  return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JAVASCRIPT);
 }
 
 function include(filename) {

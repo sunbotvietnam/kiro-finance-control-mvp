@@ -5,7 +5,8 @@
     transactions: [],
     staging: [],
     tax: null,
-    fullReport: null
+    fullReport: null,
+    showAllCategories: false
   };
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -89,16 +90,26 @@
         if (btn.dataset.direction) form.direction.value = btn.dataset.direction;
         if (btn.dataset.preset === 'advance') {
           form.direction.value = 'outflow';
-          form.category_code.value = 'TAMUNG';
         }
         if (btn.dataset.preset === 'settlement') {
           form.direction.value = 'outflow';
-          form.category_code.value = 'CHIKHAC';
         }
         filterCategoryOptions(form.direction.value);
+        if (btn.dataset.preset === 'advance') form.category_code.value = 'TAMUNG';
+        if (btn.dataset.preset === 'settlement') form.category_code.value = 'CHIKHAC';
       });
     });
     document.getElementById('quickForm').addEventListener('submit', submitQuickForm);
+    document.getElementById('toggleCategoryScopeBtn').addEventListener('click', () => {
+      state.showAllCategories = !state.showAllCategories;
+      filterCategoryOptions(document.getElementById('quickForm').direction.value || 'inflow');
+    });
+    document.getElementById('amountDisplay').addEventListener('input', event => {
+      const amount = parseMoney(event.target.value);
+      event.target.value = formatPlainNumber(amount);
+      document.querySelector('[name="amount"]').value = amount || '';
+      document.getElementById('amountPreview').textContent = money(amount);
+    });
     document.getElementById('applyFiltersBtn').addEventListener('click', loadLedger);
     document.getElementById('parseBankBtn').addEventListener('click', submitRawBankText);
     document.getElementById('exportTxBtn').addEventListener('click', async () => {
@@ -115,7 +126,8 @@
     event.preventDefault();
     const form = event.currentTarget;
     const payload = Object.fromEntries(new FormData(form).entries());
-    payload.amount = Number(payload.amount);
+    payload.amount = parseMoney(payload.amount_display || payload.amount);
+    delete payload.amount_display;
     payload.source_system = payload.direction === 'transfer' ? 'transfer' : 'manual';
     payload.source_id = 'manual-' + Date.now();
     try {
@@ -134,6 +146,7 @@
       }
       form.reset();
       setDefaultDate();
+      document.getElementById('amountPreview').textContent = '0 đ';
       form.direction.value = payload.direction;
       await Promise.all([loadDashboard(), loadLedger(), loadTax(), loadReports()]);
     } catch (err) {
@@ -168,8 +181,12 @@
   }
 
   function filterCategoryOptions(direction) {
-    const categories = state.bootstrap.categories.filter(x => x.direction === direction || (direction === 'outflow' && x.direction === 'outflow'));
+    const categories = state.showAllCategories ? state.bootstrap.categories : state.bootstrap.categories.filter(x => x.direction === direction);
     document.querySelector('[name="category_code"]').innerHTML = categories.map(x => `<option value="${escapeHtml(x.category_code)}">${escapeHtml(x.category_code)} · ${escapeHtml(x.category_name)}</option>`).join('');
+    document.getElementById('toggleCategoryScopeBtn').textContent = state.showAllCategories ? 'Chỉ hiện mã khoản phù hợp' : 'Hiện tất cả mã khoản';
+    document.getElementById('categoryHint').textContent = state.showAllCategories
+      ? 'Đang hiển thị tất cả mã khoản từ DM_CATEGORY.'
+      : 'Đang lọc theo loại giao dịch để tránh chọn sai chiều thu/chi.';
   }
 
   function renderDashboard() {
@@ -318,6 +335,15 @@
 
   function money(value) {
     return Number(value || 0).toLocaleString('vi-VN') + ' đ';
+  }
+
+  function parseMoney(value) {
+    return Number(String(value || '').replace(/[^\d]/g, '')) || 0;
+  }
+
+  function formatPlainNumber(value) {
+    const amount = Number(value || 0);
+    return amount ? amount.toLocaleString('vi-VN') : '';
   }
 
   function escapeHtml(value) {
