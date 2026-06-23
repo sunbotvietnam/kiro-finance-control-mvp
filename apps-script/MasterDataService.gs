@@ -19,6 +19,10 @@ var MasterDataService = (function () {
     return activeRows('DM_STAFF');
   }
 
+  function getSchools() {
+    return activeRows('DM_SCHOOL');
+  }
+
   function getCounterparties() {
     return activeRows('DM_COUNTERPARTY');
   }
@@ -49,7 +53,10 @@ var MasterDataService = (function () {
     });
     if (exact) return exact;
     var candidates = DataService.readRows('DM_ALIAS_MAP').filter(function (row) {
-      return row.status === 'approved' && DataService.normalizeText(row.alias_text).indexOf(q) !== -1;
+      var alias = DataService.normalizeText(row.alias_text);
+      return row.status === 'approved' && alias && q.indexOf(alias) !== -1;
+    }).sort(function (a, b) {
+      return DataService.normalizeText(b.alias_text).length - DataService.normalizeText(a.alias_text).length;
     });
     return candidates[0] || null;
   }
@@ -79,6 +86,7 @@ var MasterDataService = (function () {
     return {
       categories: getCategories(),
       accounts: getAccounts(),
+      schools: getSchools(),
       staff: getStaff(),
       counterparties: getCounterparties(),
       currentUser: PermissionService.getCurrentUser(),
@@ -89,6 +97,7 @@ var MasterDataService = (function () {
   return {
     getCategories: getCategories,
     getAccounts: getAccounts,
+    getSchools: getSchools,
     getStaff: getStaff,
     getCounterparties: getCounterparties,
     searchCounterparties: searchCounterparties,

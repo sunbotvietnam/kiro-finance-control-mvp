@@ -3,7 +3,7 @@ var ImportStagingService = (function () {
     PermissionService.assertPermission('cash.create_transaction');
     if (!rawText) throw new Error('Thiếu nội dung SMS/email ngân hàng.');
     sourceSystem = sourceSystem || 'bank_sms';
-    var parsed = parseBankMessage(rawText);
+    var parsed = parseSmartFinanceText(rawText);
     var importId = SequenceService.getNextSequence('import_staging', 'IMP');
     var duplicateHash = DataService.generateHash([sourceSystem, rawText, parsed.amount, parsed.date, parsed.direction]);
     var status = findDuplicateInStagingOrTransactions(duplicateHash) ? 'duplicate' : (parsed.amount ? 'suggested' : 'needs_review');
@@ -67,6 +67,25 @@ var ImportStagingService = (function () {
     };
   }
 
+  function parseSmartFinanceText(rawText) {
+    var fallback = parseBankMessage(rawText);
+    var ai = AiParseService.parseFinanceText(rawText, {
+      categories: MasterDataService.getCategories().map(function (row) { return row.category_code + ':' + row.category_name; })
+    });
+    if (!ai) return fallback;
+    return {
+      date: ai.transaction_date || fallback.date,
+      amount: Number(ai.amount || fallback.amount || 0),
+      direction: ai.direction || fallback.direction,
+      account: ai.account_hint || fallback.account,
+      counterpartyText: ai.counterparty_text || fallback.counterpartyText,
+      description: ai.description || fallback.description,
+      category_code: ai.category_code || '',
+      staff_id: '',
+      confidence: Number(ai.confidence || fallback.confidence || 0.5)
+    };
+  }
+
   function suggestCategory(parsed) {
     if (!parsed || !parsed.direction) return 'CHIKHAC';
     var desc = DataService.normalizeText(parsed.description || '');
@@ -76,6 +95,9 @@ var ImportStagingService = (function () {
       if (desc.indexOf('ung') !== -1) return 'UNGHD';
       return 'THUHD';
     }
+    if (desc.indexOf('in an') !== -1 || desc.indexOf('in ') !== -1 || desc.indexOf('an pham') !== -1 ||
+        desc.indexOf('media') !== -1 || desc.indexOf('quang lich') !== -1 || desc.indexOf('chung nhan') !== -1) return 'MEDIA';
+    if (parsed.category_code) return parsed.category_code;
     if (desc.indexOf('luong') !== -1 || desc.indexOf('bhxh') !== -1) return 'LUONG-BH';
     if (desc.indexOf('thue') !== -1) return 'THUE';
     if (desc.indexOf('mat bang') !== -1 || desc.indexOf('thue nha') !== -1) return 'THUEMATBANG';

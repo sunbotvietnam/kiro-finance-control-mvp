@@ -75,6 +75,7 @@
         <select name="category_code" required></select>
         <small id="categoryHint" class="field-note">Danh mục lấy từ DM_CATEGORY. Có thể thêm/bớt trong Google Sheet.</small>
       </label>
+      <label>Trường/cơ sở<select name="school_id"></select></label>
       <label>Đối tượng<select name="counterparty_id"></select></label>
       <label>Nhân sự liên quan<select name="staff_id"></select></label>
       <label>Phương thức thanh toán
@@ -166,6 +167,11 @@
     <div class="panel">
       <h3>Master data đang dùng</h3>
       <div id="settingsList" class="list"></div>
+    </div>
+    <div class="panel">
+      <h3>Chuẩn hóa dữ liệu cũ</h3>
+      <p class="field-note">Chạy sau khi copy thêm giao dịch vào TRANSACTIONS để tự gắn mã trường, nhân sự, đối tượng và alias quen thuộc.</p>
+      <button class="secondary" id="normalizeLegacyBtn">Chuẩn hóa TRANSACTIONS</button>
     </div>
     <div class="panel">
       <h3>Hook đã sẵn sàng</h3>

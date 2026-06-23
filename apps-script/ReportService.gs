@@ -1,16 +1,16 @@
 var ReportService = (function () {
   function getExecutiveSummary(filters) {
-    filters = currentMonthFilter(filters);
-    var summary = TransactionService.calculateCashSummary(filters);
+    var allRows = TransactionService.getTransactions({});
+    filters = currentMonthFilterFromRows(filters, allRows);
+    var periodRows = filterRowsByPeriod(allRows, filters.period_month);
+    var summary = calculateSummaryFromRows(periodRows, allRows);
     return {
       title: 'Báo cáo điều hành rút gọn',
       period_month: filters.period_month || '',
       period_label: DataService.displayPeriodMonth(filters.period_month || ''),
       cash: summary,
-      balances: TransactionService.calculateBalances({}),
-      top_expense_groups: getCashByCategory(Object.assign({}, filters, { direction: 'outflow' })).slice(0, 5),
-      data_quality: getDataQualityReport(),
-      forecast_4_weeks: ForecastService.getFourWeekForecast()
+      balances: calculateBalancesFromRows(allRows),
+      top_expense_groups: groupCash(periodRows.filter(function (tx) { return tx.direction === 'outflow'; }), 'category_code').slice(0, 5)
     };
   }
 
@@ -20,6 +20,7 @@ var ReportService = (function () {
       title: 'Báo cáo tài chính đầy đủ cơ bản',
       cash_by_category: getCashByCategory(filters),
       cash_by_account: getCashByAccount(filters),
+      cash_by_school: getCashBySchool(filters),
       cash_by_counterparty: getCashByCounterparty(filters),
       cash_by_staff: getCashByStaff(filters),
       cash_by_month: getCashByMonth(filters),
@@ -39,6 +40,10 @@ var ReportService = (function () {
 
   function getCashByCounterparty(filters) {
     return groupCash(TransactionService.getTransactions(filters || {}), 'counterparty_id');
+  }
+
+  function getCashBySchool(filters) {
+    return groupCash(TransactionService.getTransactions(filters || {}), 'school_id');
   }
 
   function getCashByStaff(filters) {
@@ -140,6 +145,16 @@ var ReportService = (function () {
     return filters;
   }
 
+  function currentMonthFilterFromRows(filters, rows) {
+    filters = filters || {};
+    if (filters.period_month) {
+      filters.period_month = DataService.normalizePeriodMonth(filters.period_month);
+      return filters;
+    }
+    filters.period_month = getLatestTransactionPeriodFromRows(rows || []) || DataService.periodMonth(new Date());
+    return filters;
+  }
+
   function getLatestTransactionPeriod() {
     var latest = '';
     DataService.readRows('TRANSACTIONS').forEach(function (tx) {
@@ -148,6 +163,76 @@ var ReportService = (function () {
       if (period && period > latest) latest = period;
     });
     return latest;
+  }
+
+  function getLatestTransactionPeriodFromRows(rows) {
+    var latest = '';
+    (rows || []).forEach(function (tx) {
+      if (['cancelled', 'voided', 'archived'].indexOf(tx.status) !== -1) return;
+      var period = DataService.normalizePeriodMonth(tx.period_month || tx.transaction_date);
+      if (period && period > latest) latest = period;
+    });
+    return latest;
+  }
+
+  function filterRowsByPeriod(rows, periodMonth) {
+    var period = DataService.normalizePeriodMonth(periodMonth);
+    return (rows || []).filter(function (row) {
+      return !period || DataService.normalizePeriodMonth(row.period_month || row.transaction_date) === period;
+    });
+  }
+
+  function calculateSummaryFromRows(periodRows, allRows) {
+    var summary = { inflow: 0, outflow: 0, transfer: 0, net: 0, available: 0, needs_review: 0, missing_evidence: 0, unmatched: 0 };
+    (periodRows || []).forEach(function (tx) {
+      if (['cancelled', 'voided', 'archived'].indexOf(tx.status) !== -1) return;
+      var amount = Number(tx.amount || 0);
+      if (tx.direction === 'inflow') summary.inflow += amount;
+      if (tx.direction === 'outflow') summary.outflow += amount;
+      if (tx.direction === 'transfer') summary.transfer += amount;
+      if (tx.status === 'needs_review') summary.needs_review += 1;
+      if (['chua_co', 'can_bo_sung', 'khong_hop_le'].indexOf(tx.evidence_status) !== -1) summary.missing_evidence += 1;
+      if (tx.match_status === 'unmatched') summary.unmatched += 1;
+    });
+    summary.net = summary.inflow - summary.outflow;
+    summary.available = calculateBalancesFromRows(allRows || []).reduce(function (sum, account) {
+      return sum + Number(account.balance || 0);
+    }, 0);
+    return summary;
+  }
+
+  function calculateBalancesFromRows(rows) {
+    var accounts = MasterDataService.getAccounts();
+    var balances = {};
+    accounts.forEach(function (account) {
+      balances[account.account_id] = {
+        account_id: account.account_id,
+        account_name: account.account_name,
+        opening_balance: Number(account.opening_balance || 0),
+        inflow: 0,
+        outflow: 0,
+        transfer_in: 0,
+        transfer_out: 0,
+        balance: Number(account.opening_balance || 0)
+      };
+    });
+    (rows || []).forEach(function (tx) {
+      if (['cancelled', 'voided', 'archived'].indexOf(tx.status) !== -1) return;
+      if (!balances[tx.account_id]) {
+        balances[tx.account_id] = { account_id: tx.account_id, account_name: tx.account_id, opening_balance: 0, inflow: 0, outflow: 0, transfer_in: 0, transfer_out: 0, balance: 0 };
+      }
+      var amount = Number(tx.amount || 0);
+      if (tx.direction === 'inflow') {
+        balances[tx.account_id].inflow += amount;
+        balances[tx.account_id].balance += amount;
+      } else if (tx.direction === 'outflow') {
+        balances[tx.account_id].outflow += amount;
+        balances[tx.account_id].balance -= amount;
+      } else if (tx.direction === 'transfer') {
+        balances[tx.account_id].transfer_out += amount;
+      }
+    });
+    return Object.keys(balances).map(function (key) { return balances[key]; });
   }
 
   function indexBy(rows, key) {

@@ -7,7 +7,10 @@ var TransactionService = (function () {
     var date = payload.transaction_date || Utilities.formatDate(new Date(), APP_CONFIG.TIMEZONE, 'yyyy-MM-dd');
     var category = payload.category_code ? DataService.findByKey('DM_CATEGORY', 'category_code', payload.category_code) : null;
     var counterparty = payload.counterparty_id ? DataService.findByKey('DM_COUNTERPARTY', 'counterparty_id', payload.counterparty_id) : null;
-    var needsReview = hasReviewGap(payload, category);
+    var derivedSchoolId = payload.school_id || (counterparty && counterparty.linked_school_id) || '';
+    var derivedStaffId = payload.staff_id || (counterparty && counterparty.linked_staff_id) || '';
+    var derivedCounterpartyId = payload.counterparty_id || (derivedSchoolId ? derivedSchoolId : '');
+    var needsReview = hasReviewGap(Object.assign({}, payload, { counterparty_id: derivedCounterpartyId }), category);
     var sourceSystem = payload.source_system || 'manual';
     var sourceId = payload.source_id || txId;
     var row = {
@@ -23,11 +26,11 @@ var TransactionService = (function () {
       currency: payload.currency || APP_CONFIG.DEFAULT_CURRENCY,
       account_id: payload.account_id,
       category_code: payload.category_code || '',
-      counterparty_id: payload.counterparty_id || '',
+      counterparty_id: derivedCounterpartyId,
       counterparty_name_snapshot: payload.counterparty_name_snapshot || (counterparty ? counterparty.counterparty_name : payload.counterparty_text || ''),
-      school_id: payload.school_id || '',
+      school_id: derivedSchoolId,
       site_id: payload.site_id || '',
-      staff_id: payload.staff_id || '',
+      staff_id: derivedStaffId,
       vendor_id: payload.vendor_id || '',
       partner_id: payload.partner_id || '',
       approval_request_id: payload.approval_request_id || '',

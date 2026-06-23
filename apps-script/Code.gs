@@ -1,8 +1,8 @@
 function doGet(e) {
-  SchemaService.ensureRequiredSheets();
   if (e && e.parameter && e.parameter.action) {
     return handleJsonpApi_(e);
   }
+  SchemaService.ensureRequiredSheets();
   return HtmlService.createTemplateFromFile('Index')
     .evaluate()
     .setTitle('Kiro Finance Control')
@@ -69,6 +69,9 @@ function handleJsonpApi_(e) {
       case 'currentUser':
         result = AuthService.publicUser(PermissionService.getCurrentUser());
         break;
+      case 'normalizeLegacy':
+        result = apiNormalizeLegacyTransactions();
+        break;
       default:
         throw new Error('Unknown action: ' + e.parameter.action);
     }
@@ -89,16 +92,26 @@ function setupFinanceCore() {
 }
 
 function apiGetBootstrapData() {
-  SchemaService.ensureRequiredSheets();
-  return MasterDataService.getBootstrapData();
+  var user = PermissionService.getCurrentUser();
+  var key = cacheKey_('bootstrap', { user: user.user_id || user.email || '' });
+  return cacheReadWrite_(key, 21600, function () {
+    return MasterDataService.getBootstrapData();
+  });
 }
 
 function apiGetDashboard(filters) {
-  return ReportService.getExecutiveSummary(filters || {});
+  filters = filters || {};
+  var user = PermissionService.getCurrentUser();
+  var key = cacheKey_('dashboard', { user: user.user_id || user.email || '', filters: filters });
+  return cacheReadWrite_(key, 21600, function () {
+    return ReportService.getExecutiveSummary(filters);
+  });
 }
 
 function apiCreateTransaction(payload) {
-  return TransactionService.createTransaction(payload);
+  var result = TransactionService.createTransaction(payload);
+  bumpCacheVersion_();
+  return result;
 }
 
 function apiGetTransactions(filters) {
@@ -106,15 +119,21 @@ function apiGetTransactions(filters) {
 }
 
 function apiUpdateTransaction(transactionId, updates) {
-  return TransactionService.updateTransaction(transactionId, updates || {});
+  var result = TransactionService.updateTransaction(transactionId, updates || {});
+  bumpCacheVersion_();
+  return result;
 }
 
 function apiCancelTransaction(transactionId, reason) {
-  return TransactionService.cancelTransaction(transactionId, reason || '');
+  var result = TransactionService.cancelTransaction(transactionId, reason || '');
+  bumpCacheVersion_();
+  return result;
 }
 
 function apiCreateStagingFromRawText(rawText, sourceSystem) {
-  return ImportStagingService.createStagingFromRawText(rawText, sourceSystem || 'bank_sms');
+  var result = ImportStagingService.createStagingFromRawText(rawText, sourceSystem || 'bank_sms');
+  bumpCacheVersion_();
+  return result;
 }
 
 function apiGetStagingItems(filters) {
@@ -122,7 +141,9 @@ function apiGetStagingItems(filters) {
 }
 
 function apiConfirmStaging(importId, confirmationPayload) {
-  return ImportStagingService.confirmStaging(importId, confirmationPayload || {});
+  var result = ImportStagingService.confirmStaging(importId, confirmationPayload || {});
+  bumpCacheVersion_();
+  return result;
 }
 
 function apiIgnoreStaging(importId) {
@@ -142,7 +163,12 @@ function apiGetDataQualityReport() {
 }
 
 function apiGetFinanceFullReport(filters) {
-  return ReportService.getFinanceFullReport(filters || {});
+  filters = filters || {};
+  var user = PermissionService.getCurrentUser();
+  var key = cacheKey_('financeReport', { user: user.user_id || user.email || '', filters: filters });
+  return cacheReadWrite_(key, 3600, function () {
+    return ReportService.getFinanceFullReport(filters);
+  });
 }
 
 function apiCreateCashPlan(payload) {
@@ -163,4 +189,33 @@ function apiExportCashSummaryCsv(filters) {
 
 function apiExportDataQualityCsv() {
   return ReportService.exportDataQualityCsv();
+}
+
+function apiNormalizeLegacyTransactions() {
+  var result = NormalizationService.normalizeLegacyTransactions();
+  bumpCacheVersion_();
+  return result;
+}
+
+function cacheReadWrite_(key, ttlSeconds, producer) {
+  var cache = CacheService.getScriptCache();
+  var hit = cache.get(key);
+  if (hit) return JSON.parse(hit);
+  var value = producer();
+  try {
+    cache.put(key, JSON.stringify(value), ttlSeconds);
+  } catch (err) {
+    // Large reports may exceed Apps Script cache value limits; returning fresh data is safer.
+  }
+  return value;
+}
+
+function cacheKey_(name, payload) {
+  var version = PropertiesService.getScriptProperties().getProperty('CACHE_VERSION') || '1';
+  var raw = JSON.stringify(payload || {});
+  return 'kfc:' + name + ':' + version + ':' + DataService.generateHash([raw]).slice(0, 24);
+}
+
+function bumpCacheVersion_() {
+  PropertiesService.getScriptProperties().setProperty('CACHE_VERSION', String(Date.now()));
 }

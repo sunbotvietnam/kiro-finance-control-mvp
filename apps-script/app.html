@@ -6,7 +6,14 @@
     staging: [],
     tax: null,
     fullReport: null,
-    showAllCategories: false
+    showAllCategories: false,
+    loaded: { ledger: false, staging: false, tax: false, reports: false }
+  };
+
+  const PRIORITY_CATEGORIES = {
+    inflow: ['THUHD', 'THUNO', 'UNGHD', 'HOANTAMUNG', 'THUKHAC'],
+    outflow: ['MEDIA', 'LUONG-BH', 'THUONG', 'VANTAI', 'VANPP', 'PHUCLOI', 'HOAHONG', 'CHIETKHAU1', 'TAMUNG', 'CHIKHAC'],
+    transfer: ['LUANCHUYEN']
   };
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -30,9 +37,10 @@
       showToast('Đang tải dữ liệu...');
       state.bootstrap = await callServer('apiGetBootstrapData');
       fillSelects();
-      await Promise.all([loadDashboard(), loadLedger(), loadStaging(), loadTax(), loadReports()]);
+      state.loaded = { ledger: false, staging: false, tax: false, reports: false };
+      await loadDashboard();
       renderSettings();
-      showToast('Đã cập nhật.');
+      showToast('Đã cập nhật tổng quan.');
     } catch (err) {
       showToast(err.message || String(err));
     }
@@ -46,22 +54,33 @@
   async function loadLedger() {
     const filters = collectFilters();
     state.transactions = await callServer('apiGetTransactions', filters);
+    state.loaded.ledger = true;
     renderLedger();
   }
 
   async function loadStaging() {
     state.staging = await callServer('apiGetStagingItems', {});
+    state.loaded.staging = true;
     renderStaging();
   }
 
   async function loadTax() {
     state.tax = await callServer('apiGetTaxSummary', {});
+    state.loaded.tax = true;
     renderTax();
   }
 
   async function loadReports() {
     state.fullReport = await callServer('apiGetFinanceFullReport', {});
+    state.loaded.reports = true;
     renderReports();
+  }
+
+  async function ensureViewData(view) {
+    if (view === 'ledger' && !state.loaded.ledger) await loadLedger();
+    if (view === 'staging' && !state.loaded.staging) await loadStaging();
+    if (view === 'tax' && !state.loaded.tax) await loadTax();
+    if (view === 'reports' && !state.loaded.reports) await loadReports();
   }
 
   function bindNavigation() {
@@ -71,6 +90,7 @@
         document.querySelectorAll('.view').forEach(x => x.classList.remove('is-active'));
         tab.classList.add('is-active');
         document.getElementById(tab.dataset.view).classList.add('is-active');
+        ensureViewData(tab.dataset.view).catch(err => showToast(err.message || String(err)));
       });
     });
   }
@@ -82,6 +102,7 @@
       showToast('Đã khởi tạo ' + res.sheets.length + ' sheet.');
       await loadAll();
     });
+    document.getElementById('normalizeLegacyBtn').addEventListener('click', normalizeLegacyTransactions);
     document.querySelectorAll('.mode').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.mode').forEach(x => x.classList.remove('is-active'));
@@ -153,7 +174,11 @@
       setDefaultDate();
       document.getElementById('amountPreview').textContent = '0 đ';
       form.direction.value = payload.direction;
-      await Promise.all([loadDashboard(), loadLedger(), loadTax(), loadReports()]);
+      await loadDashboard();
+      state.loaded.ledger = false;
+      state.loaded.tax = false;
+      state.loaded.reports = false;
+      if (document.getElementById('ledger').classList.contains('is-active')) await loadLedger();
     } catch (err) {
       showToast('Lưu thất bại: ' + (err.message || String(err)));
     } finally {
@@ -186,9 +211,11 @@
   function fillSelects() {
     const data = state.bootstrap;
     const accountOptions = data.accounts.map(x => `<option value="${escapeHtml(x.account_id)}">${escapeHtml(x.account_name)}</option>`).join('');
+    const schoolOptions = '<option value="">Không gắn trường</option>' + (data.schools || []).map(x => `<option value="${escapeHtml(x.school_id)}">${escapeHtml(x.school_id)} · ${escapeHtml(x.school_name)}</option>`).join('');
     const counterpartyOptions = '<option value="">Chọn sau</option>' + data.counterparties.map(x => `<option value="${escapeHtml(x.counterparty_id)}">${escapeHtml(x.counterparty_name)}</option>`).join('');
     const staffOptions = '<option value="">Không gắn nhân sự</option>' + data.staff.map(x => `<option value="${escapeHtml(x.staff_id)}">${escapeHtml(x.staff_name)} · ${escapeHtml(x.staff_type)}</option>`).join('');
     document.querySelector('[name="account_id"]').innerHTML = accountOptions;
+    document.querySelector('[name="school_id"]').innerHTML = schoolOptions;
     document.querySelector('[name="counterparty_id"]').innerHTML = counterpartyOptions;
     document.querySelector('[name="staff_id"]').innerHTML = staffOptions;
     document.getElementById('filterAccount').innerHTML = '<option value="">Tài khoản</option>' + accountOptions;
@@ -197,12 +224,24 @@
   }
 
   function filterCategoryOptions(direction) {
-    const categories = state.showAllCategories ? state.bootstrap.categories : state.bootstrap.categories.filter(x => x.direction === direction);
+    const categories = sortCategoriesByPriority(state.showAllCategories ? state.bootstrap.categories : state.bootstrap.categories.filter(x => x.direction === direction), direction);
     document.querySelector('[name="category_code"]').innerHTML = categories.map(x => `<option value="${escapeHtml(x.category_code)}">${escapeHtml(x.category_code)} · ${escapeHtml(x.category_name)}</option>`).join('');
     document.getElementById('toggleCategoryScopeBtn').textContent = state.showAllCategories ? 'Chỉ hiện mã khoản phù hợp' : 'Hiện tất cả mã khoản';
     document.getElementById('categoryHint').textContent = state.showAllCategories
-      ? 'Đang hiển thị tất cả mã khoản từ DM_CATEGORY.'
-      : 'Đang lọc theo loại giao dịch để tránh chọn sai chiều thu/chi.';
+      ? 'Đang hiển thị tất cả mã khoản từ DM_CATEGORY, mã thường dùng vẫn được đẩy lên đầu.'
+      : 'Đang lọc theo loại giao dịch và ưu tiên mã thường dùng.';
+  }
+
+  function sortCategoriesByPriority(categories, direction) {
+    const priority = PRIORITY_CATEGORIES[direction] || [];
+    return categories.slice().sort((a, b) => {
+      const ai = priority.indexOf(a.category_code);
+      const bi = priority.indexOf(b.category_code);
+      const ar = ai === -1 ? 999 : ai;
+      const br = bi === -1 ? 999 : bi;
+      if (ar !== br) return ar - br;
+      return String(a.category_code).localeCompare(String(b.category_code));
+    });
   }
 
   function renderDashboard() {
@@ -216,10 +255,10 @@
     document.getElementById('mReview').textContent = cash.needs_review || 0;
     document.getElementById('mEvidence').textContent = cash.missing_evidence || 0;
     document.getElementById('mUnmatched').textContent = cash.unmatched || 0;
-    document.getElementById('mQuality').textContent = d.data_quality.total_issues || 0;
+    document.getElementById('mQuality').textContent = d.data_quality ? (d.data_quality.total_issues || 0) : '-';
     document.getElementById('balanceList').innerHTML = emptyOrRows(d.balances, x => row(x.account_name || x.account_id, money(x.balance)));
     document.getElementById('topExpenseList').innerHTML = emptyOrRows(d.top_expense_groups, x => row(x.key, money(x.outflow)));
-    document.getElementById('forecastList').innerHTML = emptyOrRows(d.forecast_4_weeks, x => row('Tuần ' + x.week + ' · ' + x.from, money(x.projected_balance)));
+    document.getElementById('forecastList').innerHTML = emptyOrRows(d.forecast_4_weeks || [], x => row('Tuần ' + x.week + ' · ' + x.from, money(x.projected_balance)));
   }
 
   function renderLedger() {
@@ -278,6 +317,7 @@
     document.getElementById('financeReport').innerHTML = [
       row('Theo mã khoản', (f.cash_by_category || []).length + ' nhóm'),
       row('Theo tài khoản', (f.cash_by_account || []).length + ' tài khoản'),
+      row('Theo trường/cơ sở', (f.cash_by_school || []).length + ' trường'),
       row('Theo đối tượng', (f.cash_by_counterparty || []).length + ' đối tượng'),
       row('Theo nhân sự', (f.cash_by_staff || []).length + ' nhân sự'),
       row('Data quality', f.data_quality ? f.data_quality.total_issues : 0)
@@ -289,6 +329,7 @@
     document.getElementById('settingsList').innerHTML = [
       row('Mã khoản', data.categories.length),
       row('Tài khoản tiền', data.accounts.length),
+      row('Trường/cơ sở DM_SCHOOL', (data.schools || []).length),
       row('Nhân sự DM_STAFF', data.staff.length),
       row('Đối tượng', data.counterparties.length),
       row('Role hiện tại', data.currentUser.role_id || '')
@@ -311,7 +352,10 @@
     try {
       await callServer('apiConfirmStaging', importId, {});
       showToast('Đã xác nhận staging.');
-      await Promise.all([loadStaging(), loadDashboard(), loadLedger(), loadTax(), loadReports()]);
+      await Promise.all([loadStaging(), loadDashboard()]);
+      state.loaded.ledger = false;
+      state.loaded.tax = false;
+      state.loaded.reports = false;
     } catch (err) {
       showToast(err.message || String(err));
     }
@@ -325,6 +369,26 @@
   async function markDuplicate(importId) {
     await callServer('apiMarkDuplicate', importId);
     await loadStaging();
+  }
+
+  async function normalizeLegacyTransactions() {
+    const btn = document.getElementById('normalizeLegacyBtn');
+    const label = btn.textContent;
+    try {
+      btn.disabled = true;
+      btn.textContent = 'Đang chuẩn hóa...';
+      showToast('Đang chuẩn hóa TRANSACTIONS...');
+      const res = await callServer('apiNormalizeLegacyTransactions');
+      state.loaded = { ledger: false, staging: state.loaded.staging, tax: false, reports: false };
+      await loadDashboard();
+      renderSettings();
+      showToast('Đã chuẩn hóa ' + res.updated_transactions + ' giao dịch.');
+    } catch (err) {
+      showToast('Chuẩn hóa thất bại: ' + (err.message || String(err)));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
   }
 
   function collectFilters() {
