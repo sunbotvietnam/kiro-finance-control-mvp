@@ -1,0 +1,176 @@
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Kiro Finance Control</p>
+    <h1>Tài chính & Dòng tiền</h1>
+  </div>
+  <button class="icon-button" id="refreshBtn" title="Làm mới">↻</button>
+</header>
+
+<nav class="tabbar" aria-label="Điều hướng chính">
+  <button class="tab is-active" data-view="dashboard">Tổng quan</button>
+  <button class="tab" data-view="quick">Nhập nhanh</button>
+  <button class="tab" data-view="ledger">Sổ dòng tiền</button>
+  <button class="tab" data-view="staging">Hộp chờ</button>
+  <button class="tab" data-view="tax">Chứng từ & thuế</button>
+  <button class="tab" data-view="reports">Báo cáo</button>
+  <button class="tab" data-view="settings">Cấu hình</button>
+</nav>
+
+<main>
+  <section id="dashboard" class="view is-active">
+    <div class="section-head">
+      <h2>Tổng quan tài chính</h2>
+      <span id="periodLabel" class="badge">Tháng này</span>
+    </div>
+    <div class="metric-grid">
+      <article class="metric"><span>Tiền khả dụng</span><strong id="mAvailable">0</strong></article>
+      <article class="metric"><span>Tổng thu tháng này</span><strong id="mInflow">0</strong></article>
+      <article class="metric"><span>Tổng chi tháng này</span><strong id="mOutflow">0</strong></article>
+      <article class="metric"><span>Dòng tiền thuần</span><strong id="mNet">0</strong></article>
+    </div>
+    <div class="two-col">
+      <section class="panel">
+        <h3>Tồn theo tài khoản tiền</h3>
+        <div id="balanceList" class="list"></div>
+      </section>
+      <section class="panel">
+        <h3>Top nhóm chi</h3>
+        <div id="topExpenseList" class="list"></div>
+      </section>
+    </div>
+    <div class="metric-grid small">
+      <article class="metric"><span>Cần rà soát</span><strong id="mReview">0</strong></article>
+      <article class="metric"><span>Thiếu chứng từ</span><strong id="mEvidence">0</strong></article>
+      <article class="metric"><span>Chưa match</span><strong id="mUnmatched">0</strong></article>
+      <article class="metric"><span>Lỗi dữ liệu</span><strong id="mQuality">0</strong></article>
+    </div>
+    <section class="panel">
+      <h3>Forecast 4 tuần</h3>
+      <div id="forecastList" class="list"></div>
+    </section>
+  </section>
+
+  <section id="quick" class="view">
+    <div class="section-head">
+      <h2>Nhập nhanh</h2>
+      <span class="badge">Cash Flow Core</span>
+    </div>
+    <div class="mode-switch">
+      <button class="mode is-active" data-direction="inflow">Tôi nhận tiền</button>
+      <button class="mode" data-direction="outflow">Tôi chi tiền</button>
+      <button class="mode" data-direction="transfer">Tôi chuyển quỹ</button>
+      <button class="mode" data-preset="advance">Tôi tạm ứng</button>
+      <button class="mode" data-preset="settlement">Tôi quyết toán</button>
+    </div>
+    <form id="quickForm" class="form-grid">
+      <input type="hidden" name="direction" value="inflow">
+      <label>Ngày phát sinh<input type="date" name="transaction_date" required></label>
+      <label>Số tiền<input type="number" name="amount" min="1" step="1000" inputmode="numeric" required></label>
+      <label>Tài khoản tiền<select name="account_id" required></select></label>
+      <label>Mã khoản<select name="category_code" required></select></label>
+      <label>Đối tượng<select name="counterparty_id"></select></label>
+      <label>Nhân sự liên quan<select name="staff_id"></select></label>
+      <label>Phương thức thanh toán
+        <select name="payment_method">
+          <option value="bank_transfer">Chuyển khoản</option>
+          <option value="cash">Tiền mặt</option>
+          <option value="wallet">Ví điện tử</option>
+          <option value="other">Khác</option>
+        </select>
+      </label>
+      <label>Trạng thái chứng từ
+        <select name="evidence_status">
+          <option value="chua_co">Chưa có</option>
+          <option value="da_co">Đã có</option>
+          <option value="can_bo_sung">Cần bổ sung</option>
+          <option value="khong_can">Không cần</option>
+        </select>
+      </label>
+      <label class="wide">Nội dung<input name="description" maxlength="300" placeholder="VD: Thu học phí Robotics tháng 6" required></label>
+      <label class="wide">Link chứng từ/file Drive<input name="evidence_link" placeholder="Không bắt buộc ở bước đầu"></label>
+      <button class="primary wide" type="submit">Lưu giao dịch</button>
+    </form>
+  </section>
+
+  <section id="ledger" class="view">
+    <div class="section-head">
+      <h2>Sổ dòng tiền</h2>
+      <button class="secondary" id="exportTxBtn">Export CSV</button>
+    </div>
+    <div class="filters">
+      <input id="filterMonth" placeholder="YYYYMM">
+      <select id="filterDirection"><option value="">Thu/chi</option><option value="inflow">Thu</option><option value="outflow">Chi</option><option value="transfer">Luân chuyển</option></select>
+      <select id="filterCategory"><option value="">Mã khoản</option></select>
+      <select id="filterAccount"><option value="">Tài khoản</option></select>
+      <button class="secondary" id="applyFiltersBtn">Lọc</button>
+    </div>
+    <div id="ledgerList" class="records"></div>
+  </section>
+
+  <section id="staging" class="view">
+    <div class="section-head">
+      <h2>Hộp chờ xác nhận</h2>
+      <span class="badge">IMPORT_STAGING</span>
+    </div>
+    <div class="panel">
+      <label>Dán SMS/email ngân hàng<textarea id="bankRawText" rows="5" placeholder="Dán nội dung ngân hàng tại đây"></textarea></label>
+      <button class="primary" id="parseBankBtn">Đưa vào hộp chờ</button>
+    </div>
+    <div id="stagingList" class="records"></div>
+  </section>
+
+  <section id="tax" class="view">
+    <div class="section-head">
+      <h2>Chứng từ & thuế</h2>
+      <span class="badge">Không tự kết luận thuế</span>
+    </div>
+    <div class="metric-grid small">
+      <article class="metric"><span>Rủi ro thấp</span><strong id="taxLow">0</strong></article>
+      <article class="metric"><span>Rủi ro trung bình</span><strong id="taxMedium">0</strong></article>
+      <article class="metric"><span>Rủi ro cao</span><strong id="taxHigh">0</strong></article>
+      <article class="metric"><span>Chờ hóa đơn</span><strong id="taxPending">0</strong></article>
+    </div>
+    <div id="taxList" class="records"></div>
+  </section>
+
+  <section id="reports" class="view">
+    <div class="section-head">
+      <h2>Báo cáo</h2>
+      <button class="secondary" id="exportQualityBtn">Export Data Quality</button>
+    </div>
+    <div class="two-col">
+      <section class="panel">
+        <h3>Báo cáo điều hành rút gọn</h3>
+        <div id="execReport" class="list"></div>
+      </section>
+      <section class="panel">
+        <h3>Báo cáo tài chính đầy đủ cơ bản</h3>
+        <div id="financeReport" class="list"></div>
+      </section>
+    </div>
+  </section>
+
+  <section id="settings" class="view">
+    <div class="section-head">
+      <h2>Cấu hình cơ bản</h2>
+      <button class="primary" id="setupBtn">Khởi tạo schema</button>
+    </div>
+    <div class="panel">
+      <h3>Master data đang dùng</h3>
+      <div id="settingsList" class="list"></div>
+    </div>
+    <div class="panel">
+      <h3>Hook đã sẵn sàng</h3>
+      <div class="hook-grid">
+        <span>APPROVAL_REQUESTS</span>
+        <span>PAYMENT_ORDERS</span>
+        <span>DOCUMENTS</span>
+        <span>EVIDENCE</span>
+        <span>TAX_FLAGS</span>
+        <span>CASH_PLANS</span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast" role="status"></div>

@@ -1,0 +1,346 @@
+<script>
+  const state = {
+    bootstrap: null,
+    dashboard: null,
+    transactions: [],
+    staging: [],
+    tax: null,
+    fullReport: null
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    bindNavigation();
+    bindActions();
+    setDefaultDate();
+    loadAll();
+  });
+
+  function callServer(fn, ...args) {
+    return new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(err => reject(err))
+        [fn](...args);
+    });
+  }
+
+  async function loadAll() {
+    try {
+      showToast('Đang tải dữ liệu...');
+      state.bootstrap = await callServer('apiGetBootstrapData');
+      fillSelects();
+      await Promise.all([loadDashboard(), loadLedger(), loadStaging(), loadTax(), loadReports()]);
+      renderSettings();
+      showToast('Đã cập nhật.');
+    } catch (err) {
+      showToast(err.message || String(err));
+    }
+  }
+
+  async function loadDashboard() {
+    state.dashboard = await callServer('apiGetDashboard', {});
+    renderDashboard();
+  }
+
+  async function loadLedger() {
+    const filters = collectFilters();
+    state.transactions = await callServer('apiGetTransactions', filters);
+    renderLedger();
+  }
+
+  async function loadStaging() {
+    state.staging = await callServer('apiGetStagingItems', {});
+    renderStaging();
+  }
+
+  async function loadTax() {
+    state.tax = await callServer('apiGetTaxSummary', {});
+    renderTax();
+  }
+
+  async function loadReports() {
+    state.fullReport = await callServer('apiGetFinanceFullReport', {});
+    renderReports();
+  }
+
+  function bindNavigation() {
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(x => x.classList.remove('is-active'));
+        document.querySelectorAll('.view').forEach(x => x.classList.remove('is-active'));
+        tab.classList.add('is-active');
+        document.getElementById(tab.dataset.view).classList.add('is-active');
+      });
+    });
+  }
+
+  function bindActions() {
+    document.getElementById('refreshBtn').addEventListener('click', loadAll);
+    document.getElementById('setupBtn').addEventListener('click', async () => {
+      const res = await callServer('setupFinanceCore');
+      showToast('Đã khởi tạo ' + res.sheets.length + ' sheet.');
+      await loadAll();
+    });
+    document.querySelectorAll('.mode').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.mode').forEach(x => x.classList.remove('is-active'));
+        btn.classList.add('is-active');
+        const form = document.getElementById('quickForm');
+        if (btn.dataset.direction) form.direction.value = btn.dataset.direction;
+        if (btn.dataset.preset === 'advance') {
+          form.direction.value = 'outflow';
+          form.category_code.value = 'TAMUNG';
+        }
+        if (btn.dataset.preset === 'settlement') {
+          form.direction.value = 'outflow';
+          form.category_code.value = 'CHIKHAC';
+        }
+        filterCategoryOptions(form.direction.value);
+      });
+    });
+    document.getElementById('quickForm').addEventListener('submit', submitQuickForm);
+    document.getElementById('applyFiltersBtn').addEventListener('click', loadLedger);
+    document.getElementById('parseBankBtn').addEventListener('click', submitRawBankText);
+    document.getElementById('exportTxBtn').addEventListener('click', async () => {
+      const csv = await callServer('apiExportTransactionsCsv', collectFilters());
+      downloadCsv('transactions.csv', csv);
+    });
+    document.getElementById('exportQualityBtn').addEventListener('click', async () => {
+      const csv = await callServer('apiExportDataQualityCsv');
+      downloadCsv('data_quality.csv', csv);
+    });
+  }
+
+  async function submitQuickForm(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const payload = Object.fromEntries(new FormData(form).entries());
+    payload.amount = Number(payload.amount);
+    payload.source_system = payload.direction === 'transfer' ? 'transfer' : 'manual';
+    payload.source_id = 'manual-' + Date.now();
+    try {
+      const tx = await callServer('apiCreateTransaction', payload);
+      showToast('Đã lưu ' + tx.transaction_id);
+      const evidenceLink = form.evidence_link.value.trim();
+      if (evidenceLink) {
+        await callServer('apiAddEvidence', {
+          transaction_id: tx.transaction_id,
+          file_link: evidenceLink,
+          file_type: 'drive_link',
+          evidence_status: 'da_co',
+          source_system: 'manual',
+          source_id: tx.transaction_id
+        });
+      }
+      form.reset();
+      setDefaultDate();
+      form.direction.value = payload.direction;
+      await Promise.all([loadDashboard(), loadLedger(), loadTax(), loadReports()]);
+    } catch (err) {
+      showToast(err.message || String(err));
+    }
+  }
+
+  async function submitRawBankText() {
+    const raw = document.getElementById('bankRawText').value.trim();
+    if (!raw) return showToast('Chưa có nội dung ngân hàng.');
+    try {
+      const item = await callServer('apiCreateStagingFromRawText', raw, 'bank_sms');
+      document.getElementById('bankRawText').value = '';
+      showToast('Đã đưa vào hộp chờ: ' + item.import_id);
+      await loadStaging();
+    } catch (err) {
+      showToast(err.message || String(err));
+    }
+  }
+
+  function fillSelects() {
+    const data = state.bootstrap;
+    const accountOptions = data.accounts.map(x => `<option value="${escapeHtml(x.account_id)}">${escapeHtml(x.account_name)}</option>`).join('');
+    const counterpartyOptions = '<option value="">Chọn sau</option>' + data.counterparties.map(x => `<option value="${escapeHtml(x.counterparty_id)}">${escapeHtml(x.counterparty_name)}</option>`).join('');
+    const staffOptions = '<option value="">Không gắn nhân sự</option>' + data.staff.map(x => `<option value="${escapeHtml(x.staff_id)}">${escapeHtml(x.staff_name)} · ${escapeHtml(x.staff_type)}</option>`).join('');
+    document.querySelector('[name="account_id"]').innerHTML = accountOptions;
+    document.querySelector('[name="counterparty_id"]').innerHTML = counterpartyOptions;
+    document.querySelector('[name="staff_id"]').innerHTML = staffOptions;
+    document.getElementById('filterAccount').innerHTML = '<option value="">Tài khoản</option>' + accountOptions;
+    document.getElementById('filterCategory').innerHTML = '<option value="">Mã khoản</option>' + data.categories.map(x => `<option value="${escapeHtml(x.category_code)}">${escapeHtml(x.category_code)} · ${escapeHtml(x.category_name)}</option>`).join('');
+    filterCategoryOptions(document.getElementById('quickForm').direction.value || 'inflow');
+  }
+
+  function filterCategoryOptions(direction) {
+    const categories = state.bootstrap.categories.filter(x => x.direction === direction || (direction === 'outflow' && x.direction === 'outflow'));
+    document.querySelector('[name="category_code"]').innerHTML = categories.map(x => `<option value="${escapeHtml(x.category_code)}">${escapeHtml(x.category_code)} · ${escapeHtml(x.category_name)}</option>`).join('');
+  }
+
+  function renderDashboard() {
+    const d = state.dashboard;
+    const cash = d.cash || {};
+    document.getElementById('mAvailable').textContent = money(cash.available);
+    document.getElementById('mInflow').textContent = money(cash.inflow);
+    document.getElementById('mOutflow').textContent = money(cash.outflow);
+    document.getElementById('mNet').textContent = money(cash.net);
+    document.getElementById('mReview').textContent = cash.needs_review || 0;
+    document.getElementById('mEvidence').textContent = cash.missing_evidence || 0;
+    document.getElementById('mUnmatched').textContent = cash.unmatched || 0;
+    document.getElementById('mQuality').textContent = d.data_quality.total_issues || 0;
+    document.getElementById('balanceList').innerHTML = emptyOrRows(d.balances, x => row(x.account_name || x.account_id, money(x.balance)));
+    document.getElementById('topExpenseList').innerHTML = emptyOrRows(d.top_expense_groups, x => row(x.key, money(x.outflow)));
+    document.getElementById('forecastList').innerHTML = emptyOrRows(d.forecast_4_weeks, x => row('Tuần ' + x.week + ' · ' + x.from, money(x.projected_balance)));
+  }
+
+  function renderLedger() {
+    document.getElementById('ledgerList').innerHTML = emptyOrRows(state.transactions, tx => {
+      const cls = tx.direction === 'inflow' ? 'amount-in' : (tx.direction === 'outflow' ? 'amount-out' : 'amount-transfer');
+      return `<article class="record">
+        <div>
+          <div class="record-head"><strong>${escapeHtml(tx.description || tx.transaction_id)}</strong><strong class="${cls}">${money(tx.amount)}</strong></div>
+          <small>${escapeHtml(tx.transaction_id)} · ${escapeHtml(tx.transaction_date)} · ${escapeHtml(tx.category_code)} · ${escapeHtml(tx.status)}</small>
+        </div>
+        <div class="record-actions">
+          <button onclick="cancelTx('${escapeHtml(tx.transaction_id)}')">Hủy</button>
+        </div>
+      </article>`;
+    });
+  }
+
+  function renderStaging() {
+    document.getElementById('stagingList').innerHTML = emptyOrRows(state.staging, item => {
+      return `<article class="record">
+        <div>
+          <div class="record-head"><strong>${escapeHtml(item.detected_description || item.raw_text)}</strong><strong>${money(item.detected_amount)}</strong></div>
+          <small>${escapeHtml(item.import_id)} · ${escapeHtml(item.review_status)} · ${escapeHtml(item.suggested_category_code)}</small>
+        </div>
+        <div class="record-actions">
+          <button onclick="confirmStaging('${escapeHtml(item.import_id)}')">Xác nhận</button>
+          <button onclick="ignoreStaging('${escapeHtml(item.import_id)}')">Bỏ qua</button>
+          <button onclick="markDuplicate('${escapeHtml(item.import_id)}')">Trùng</button>
+        </div>
+      </article>`;
+    });
+  }
+
+  function renderTax() {
+    const s = (state.tax && state.tax.summary) || {};
+    document.getElementById('taxLow').textContent = s.low || 0;
+    document.getElementById('taxMedium').textContent = s.medium || 0;
+    document.getElementById('taxHigh').textContent = s.high || 0;
+    document.getElementById('taxPending').textContent = s.pending_invoice || 0;
+    document.getElementById('taxList').innerHTML = emptyOrRows((state.tax && state.tax.items) || [], x => {
+      return `<article class="record"><div><strong>${escapeHtml(x.transaction_id)}</strong><small>${escapeHtml(x.tax_risk_level)} · ${escapeHtml(x.invoice_status)} · ${escapeHtml(x.tax_risk_reason)}</small></div></article>`;
+    });
+  }
+
+  function renderReports() {
+    const d = state.dashboard || {};
+    const f = state.fullReport || {};
+    document.getElementById('execReport').innerHTML = [
+      row('Tiền khả dụng', money(d.cash && d.cash.available)),
+      row('Thu tháng', money(d.cash && d.cash.inflow)),
+      row('Chi tháng', money(d.cash && d.cash.outflow)),
+      row('Dòng tiền thuần', money(d.cash && d.cash.net)),
+      row('Khoản cần rà soát', d.cash ? d.cash.needs_review : 0),
+      row('Chứng từ thiếu', d.cash ? d.cash.missing_evidence : 0)
+    ].join('');
+    document.getElementById('financeReport').innerHTML = [
+      row('Theo mã khoản', (f.cash_by_category || []).length + ' nhóm'),
+      row('Theo tài khoản', (f.cash_by_account || []).length + ' tài khoản'),
+      row('Theo đối tượng', (f.cash_by_counterparty || []).length + ' đối tượng'),
+      row('Theo nhân sự', (f.cash_by_staff || []).length + ' nhân sự'),
+      row('Data quality', f.data_quality ? f.data_quality.total_issues : 0)
+    ].join('');
+  }
+
+  function renderSettings() {
+    const data = state.bootstrap || { categories: [], accounts: [], staff: [], counterparties: [], currentUser: {} };
+    document.getElementById('settingsList').innerHTML = [
+      row('Mã khoản', data.categories.length),
+      row('Tài khoản tiền', data.accounts.length),
+      row('Nhân sự DM_STAFF', data.staff.length),
+      row('Đối tượng', data.counterparties.length),
+      row('Role hiện tại', data.currentUser.role_id || '')
+    ].join('');
+  }
+
+  async function cancelTx(transactionId) {
+    const reason = prompt('Lý do hủy giao dịch?');
+    if (!reason) return;
+    try {
+      await callServer('apiCancelTransaction', transactionId, reason);
+      showToast('Đã hủy ' + transactionId);
+      await Promise.all([loadDashboard(), loadLedger(), loadReports()]);
+    } catch (err) {
+      showToast(err.message || String(err));
+    }
+  }
+
+  async function confirmStaging(importId) {
+    try {
+      await callServer('apiConfirmStaging', importId, {});
+      showToast('Đã xác nhận staging.');
+      await Promise.all([loadStaging(), loadDashboard(), loadLedger(), loadTax(), loadReports()]);
+    } catch (err) {
+      showToast(err.message || String(err));
+    }
+  }
+
+  async function ignoreStaging(importId) {
+    await callServer('apiIgnoreStaging', importId);
+    await loadStaging();
+  }
+
+  async function markDuplicate(importId) {
+    await callServer('apiMarkDuplicate', importId);
+    await loadStaging();
+  }
+
+  function collectFilters() {
+    return {
+      period_month: document.getElementById('filterMonth').value.trim(),
+      direction: document.getElementById('filterDirection').value,
+      category_code: document.getElementById('filterCategory').value,
+      account_id: document.getElementById('filterAccount').value
+    };
+  }
+
+  function setDefaultDate() {
+    const dateInput = document.querySelector('[name="transaction_date"]');
+    if (dateInput && !dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+  }
+
+  function emptyOrRows(items, mapper) {
+    if (!items || !items.length) return '<div class="list-row"><span>Chưa có dữ liệu</span><strong>0</strong></div>';
+    return items.map(mapper).join('');
+  }
+
+  function row(label, value) {
+    return `<div class="list-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+  }
+
+  function money(value) {
+    return Number(value || 0).toLocaleString('vi-VN') + ' đ';
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  }
+
+  function downloadCsv(filename, csv) {
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function showToast(message) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.classList.add('show');
+    clearTimeout(showToast.timer);
+    showToast.timer = setTimeout(() => toast.classList.remove('show'), 2600);
+  }
+</script>
