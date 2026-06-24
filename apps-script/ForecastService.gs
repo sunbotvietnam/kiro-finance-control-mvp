@@ -30,6 +30,37 @@ var ForecastService = (function () {
     return weeks;
   }
 
+  function getForecast(days) {
+    days = Number(days || 90);
+    var available = TransactionService.calculateCashSummary({}).available;
+    var plans = getCashPlans({ status: 'planned' }).concat(getCashPlans({ status: 'committed' }));
+    var today = new Date();
+    var horizon = new Date(today.getTime() + days * 24 * 3600 * 1000);
+    var buckets = { next_30: { inflow: 0, outflow: 0 }, next_60: { inflow: 0, outflow: 0 }, next_90: { inflow: 0, outflow: 0 } };
+    plans.forEach(function (plan) {
+      var d = new Date(plan.expected_date);
+      if (isNaN(d.getTime()) || d < today || d > horizon) return;
+      var diff = Math.ceil((d.getTime() - today.getTime()) / 86400000);
+      var key = diff <= 30 ? 'next_30' : (diff <= 60 ? 'next_60' : 'next_90');
+      if (plan.direction === 'inflow') buckets[key].inflow += Number(plan.amount || 0);
+      if (plan.direction === 'outflow') buckets[key].outflow += Number(plan.amount || 0);
+    });
+    var projected = available;
+    Object.keys(buckets).forEach(function (key) {
+      projected += buckets[key].inflow - buckets[key].outflow;
+      buckets[key].net = buckets[key].inflow - buckets[key].outflow;
+      buckets[key].projected_balance = projected;
+      buckets[key].warning = projected < APP_CONFIG.CASH_WARNING_THRESHOLD ? 'low_cash' : '';
+    });
+    return {
+      available: available,
+      threshold: APP_CONFIG.CASH_WARNING_THRESHOLD,
+      buckets: buckets,
+      four_weeks: getFourWeekForecast(),
+      plans: plans.sort(function (a, b) { return String(a.expected_date).localeCompare(String(b.expected_date)); }).slice(0, 100)
+    };
+  }
+
   function getCashPlans(filters) {
     return DataService.filterRows('CASH_PLANS', filters || {});
   }
@@ -82,6 +113,7 @@ var ForecastService = (function () {
 
   return {
     getFourWeekForecast: getFourWeekForecast,
+    getForecast: getForecast,
     getCashPlans: getCashPlans,
     createCashPlan: createCashPlan,
     convertPlanToActual: convertPlanToActual

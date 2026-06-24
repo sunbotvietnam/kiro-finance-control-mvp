@@ -105,6 +105,7 @@ var TransactionService = (function () {
     var dateTo = normalizeDateFilter(filters.date_to);
     return rows.filter(function (row) {
       var txDate = normalizeDateFilter(row.transaction_date);
+      if (filters.transaction_id && row.transaction_id !== filters.transaction_id) return false;
       if (filterPeriod && DataService.normalizePeriodMonth(row.period_month || row.transaction_date) !== filterPeriod) return false;
       if (dateFrom && txDate && txDate < dateFrom) return false;
       if (dateTo && txDate && txDate > dateTo) return false;

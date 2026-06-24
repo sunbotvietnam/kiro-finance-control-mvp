@@ -6,11 +6,12 @@ var AiParseService = (function () {
     var prompt = [
       'Bạn là bộ phân loại giao dịch tài chính nội bộ Kiro.',
       'Trả về duy nhất JSON hợp lệ với các trường:',
-      'transaction_date, direction, amount, account_hint, counterparty_text, category_code, description, confidence.',
+      'transaction_date, direction, amount, account_hint, counterparty_text, category_code, school_id, staff_id, description, confidence.',
       'direction chỉ dùng inflow/outflow/transfer.',
       'category_code phải ưu tiên một trong DM_CATEGORY hiện có.',
       'Nếu là SMS trừ tiền/in ấn/chứng nhận/ấn phẩm/media/quảng lịch thì ưu tiên MEDIA.',
       'Nếu là thu từ trường mầm non thì dùng THUHD và counterparty_text là tên trường.',
+      'Nếu nội dung có mã trường như HN-QM, NA-HHT thì trả school_id đúng mã đó.',
       'Không tự bịa dữ liệu nếu không chắc; confidence 0-1.',
       'DM_CATEGORY: ' + (context && context.categories ? context.categories.join(', ') : ''),
       'Nội dung cần đọc:',

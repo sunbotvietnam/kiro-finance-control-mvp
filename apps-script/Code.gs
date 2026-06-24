@@ -51,6 +51,9 @@ function handleJsonpApi_(e) {
       case 'createStaging':
         result = apiCreateStagingFromRawText(payload.rawText, payload.sourceSystem || 'bank_sms');
         break;
+      case 'createStagingBatch':
+        result = apiCreateStagingBatch(payload.rawText, payload.sourceSystem || 'bank_sms');
+        break;
       case 'confirmStaging':
         result = apiConfirmStaging(payload.importId, payload.confirmationPayload || {});
         break;
@@ -77,6 +80,24 @@ function handleJsonpApi_(e) {
         break;
       case 'normalizeLegacy':
         result = apiNormalizeLegacyTransactions();
+        break;
+      case 'forecast':
+        result = apiGetForecast(payload.days || 90);
+        break;
+      case 'cashPlans':
+        result = apiGetCashPlans(payload);
+        break;
+      case 'createCashPlan':
+        result = apiCreateCashPlan(payload);
+        break;
+      case 'addEvidence':
+        result = apiAddEvidence(payload);
+        break;
+      case 'reconciliation':
+        result = apiGetReconciliation(payload);
+        break;
+      case 'autoReconcile':
+        result = apiAutoReconcile(payload);
         break;
       default:
         throw new Error('Unknown action: ' + e.parameter.action);
@@ -121,7 +142,7 @@ function apiCreateTransaction(payload) {
 }
 
 function apiGetTransactions(filters) {
-  return TransactionService.getTransactions(filters || {});
+  return TransactionService.getTransactions(stripSystemFields_(filters || {}));
 }
 
 function apiUpdateTransaction(transactionId, updates) {
@@ -142,8 +163,14 @@ function apiCreateStagingFromRawText(rawText, sourceSystem) {
   return result;
 }
 
+function apiCreateStagingBatch(rawText, sourceSystem) {
+  var result = ImportStagingService.createStagingBatch(rawText, sourceSystem || 'bank_sms');
+  bumpCacheVersion_();
+  return result;
+}
+
 function apiGetStagingItems(filters) {
-  return ImportStagingService.getStagingItems(filters || {});
+  return ImportStagingService.getStagingItems(stripSystemFields_(filters || {}));
 }
 
 function apiConfirmStaging(importId, confirmationPayload) {
@@ -196,11 +223,33 @@ function apiEmailReport(payload) {
 }
 
 function apiCreateCashPlan(payload) {
-  return ForecastService.createCashPlan(payload || {});
+  var result = ForecastService.createCashPlan(payload || {});
+  bumpCacheVersion_();
+  return result;
 }
 
 function apiAddEvidence(payload) {
-  return EvidenceService.addEvidence(payload || {});
+  var result = EvidenceService.addEvidence(payload || {});
+  bumpCacheVersion_();
+  return result;
+}
+
+function apiGetForecast(days) {
+  return ForecastService.getForecast(days || 90);
+}
+
+function apiGetCashPlans(filters) {
+  return ForecastService.getCashPlans(stripSystemFields_(filters || {}));
+}
+
+function apiGetReconciliation(filters) {
+  return ReconciliationService.getReport(stripSystemFields_(filters || {}));
+}
+
+function apiAutoReconcile(filters) {
+  var result = ReconciliationService.autoReconcile(stripSystemFields_(filters || {}));
+  bumpCacheVersion_();
+  return result;
 }
 
 function apiExportTransactionsCsv(filters) {
@@ -228,6 +277,15 @@ function stripHtml_(html) {
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function stripSystemFields_(payload) {
+  var clean = {};
+  Object.keys(payload || {}).forEach(function (key) {
+    if (['auth_token', 'token', 'callback', 'action'].indexOf(key) !== -1) return;
+    clean[key] = payload[key];
+  });
+  return clean;
 }
 
 function cacheReadWrite_(key, ttlSeconds, producer) {
