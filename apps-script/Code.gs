@@ -69,6 +69,9 @@ function handleJsonpApi_(e) {
       case 'dataQuality':
         result = apiGetDataQualityReport();
         break;
+      case 'emailReport':
+        result = apiEmailReport(payload);
+        break;
       case 'currentUser':
         result = AuthService.publicUser(PermissionService.getCurrentUser());
         break;
@@ -174,6 +177,24 @@ function apiGetFinanceFullReport(filters) {
   });
 }
 
+function apiEmailReport(payload) {
+  payload = payload || {};
+  PermissionService.assertPermission('report.export');
+  var to = String(payload.to || '').trim();
+  if (!to) throw new Error('Thiếu email nhận báo cáo.');
+  var subject = String(payload.subject || 'Kiro Finance Control - Báo cáo quản trị').trim();
+  var html = String(payload.html || '').trim();
+  if (!html) throw new Error('Thiếu nội dung báo cáo.');
+  MailApp.sendEmail({
+    to: to,
+    subject: subject,
+    htmlBody: html,
+    body: stripHtml_(html)
+  });
+  AuditService.logAction('email_report', 'REPORT', subject, null, { to: to, subject: subject }, 'success', '');
+  return { sent: true, to: to, subject: subject };
+}
+
 function apiCreateCashPlan(payload) {
   return ForecastService.createCashPlan(payload || {});
 }
@@ -198,6 +219,15 @@ function apiNormalizeLegacyTransactions() {
   var result = NormalizationService.normalizeLegacyTransactions();
   bumpCacheVersion_();
   return result;
+}
+
+function stripHtml_(html) {
+  return String(html || '')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function cacheReadWrite_(key, ttlSeconds, producer) {
