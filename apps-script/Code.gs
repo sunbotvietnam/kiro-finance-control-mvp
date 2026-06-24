@@ -42,6 +42,9 @@ function handleJsonpApi_(e) {
       case 'createTransaction':
         result = apiCreateTransaction(payload);
         break;
+      case 'updateTransaction':
+        result = apiUpdateTransaction(payload.transactionId, payload.updates || {});
+        break;
       case 'staging':
         result = apiGetStagingItems(payload);
         break;

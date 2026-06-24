@@ -125,6 +125,7 @@ var ImportStagingService = (function () {
       category_code: payload.category_code || item.suggested_category_code,
       counterparty_id: payload.counterparty_id || item.suggested_counterparty_id,
       counterparty_text: item.detected_counterparty_text,
+      school_id: payload.school_id || '',
       staff_id: payload.staff_id || item.suggested_staff_id,
       description: payload.description || item.detected_description,
       payment_method: payload.payment_method || '',

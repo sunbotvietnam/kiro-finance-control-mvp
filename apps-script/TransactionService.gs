@@ -101,12 +101,18 @@ var TransactionService = (function () {
     var rows = PermissionService.applyScope(DataService.readRows('TRANSACTIONS'));
     filters = filters || {};
     var filterPeriod = DataService.normalizePeriodMonth(filters.period_month);
+    var dateFrom = normalizeDateFilter(filters.date_from);
+    var dateTo = normalizeDateFilter(filters.date_to);
     return rows.filter(function (row) {
+      var txDate = normalizeDateFilter(row.transaction_date);
       if (filterPeriod && DataService.normalizePeriodMonth(row.period_month || row.transaction_date) !== filterPeriod) return false;
+      if (dateFrom && txDate && txDate < dateFrom) return false;
+      if (dateTo && txDate && txDate > dateTo) return false;
       if (filters.direction && row.direction !== filters.direction) return false;
       if (filters.category_code && row.category_code !== filters.category_code) return false;
       if (filters.account_id && row.account_id !== filters.account_id) return false;
       if (filters.counterparty_id && row.counterparty_id !== filters.counterparty_id) return false;
+      if (filters.school_id && row.school_id !== filters.school_id) return false;
       if (filters.staff_id && row.staff_id !== filters.staff_id) return false;
       if (filters.evidence_status && row.evidence_status !== filters.evidence_status) return false;
       if (filters.match_status && row.match_status !== filters.match_status) return false;
@@ -199,6 +205,19 @@ var TransactionService = (function () {
 
   function buildDuplicateHash(payload, sourceSystem, sourceId) {
     return DataService.generateHash([sourceSystem, sourceId, payload.transaction_date, payload.direction, payload.amount, payload.account_id, payload.description]);
+  }
+
+  function normalizeDateFilter(value) {
+    if (!value) return '';
+    if (Object.prototype.toString.call(value) === '[object Date]') {
+      return Utilities.formatDate(value, APP_CONFIG.TIMEZONE, 'yyyy-MM-dd');
+    }
+    var text = String(value).trim();
+    var iso = text.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+    if (iso) return iso[1] + '-' + ('0' + iso[2]).slice(-2) + '-' + ('0' + iso[3]).slice(-2);
+    var vn = text.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);
+    if (vn) return vn[3] + '-' + ('0' + vn[2]).slice(-2) + '-' + ('0' + vn[1]).slice(-2);
+    return text.slice(0, 10);
   }
 
   function assertNoDuplicate(hash) {
